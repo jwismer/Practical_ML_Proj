@@ -1,0 +1,82 @@
+---
+title: 'Practical Mchine Learning: Predicting Exercise Performane using the PML dataset'
+author: "jwismer"
+date: "Saturday, July 11, 2015"
+output: html_document
+---
+
+## Executive Summary
+
+This analysis will examine the Weight Lifting Execise dataset available from the Human Activity Recognition website: http://groupware.les.inf.puc-rio.br/har. The WLE dataset was gathered to assess correctness in performance of weight lifting exercises (barbell curls in this case) based on various biometric measurements.
+
+In this project we will use a training dataset to build a model that we will then assess against the testing dataaet provided. The model will be used to predict the 'classe' feature. The test dataset will be used to assess the out of band error rate.
+
+```{r, echo=TRUE}
+library(caret)
+#load the WLE training and test datasets
+wle_training <- read.csv("pml-training.csv", header=TRUE)
+wle_testing <- read.csv("pml-testing.csv", header=TRUE)
+```
+
+## Exploratory Analysis
+The WLE training dataset consists of a dataframe with 19622 observations on 160 variables.  We'll use the variables that provide the average for each measurement type. These are the columns that contain the string 'avg', so we subset the training and test data on those columns.
+
+We review the summary and a scattter plot matrix of a subset of the features, to determine if we obsevre trends.
+
+```{r, echo=TRUE}
+#use the main variables for belt, arm, dumbbell, and forearm to build the models
+trainData <- subset(wle_training, select=c("roll_belt", "pitch_belt","yaw_belt", "total_accel_belt", 
+                                           "roll_arm", "pitch_arm","yaw_arm", "total_accel_arm",
+                                           "roll_dumbbell", "pitch_dumbbell","yaw_dumbbell", "total_accel_dumbbell",
+                                           "roll_forearm", "pitch_forearm","yaw_forearm", "total_accel_forearm"))
+trainData$classe <- wle_training$classe
+testData <- subset(wle_testing, select=c("roll_belt", "pitch_belt","yaw_belt", "total_accel_belt", 
+                                         "roll_arm", "pitch_arm","yaw_arm", "total_accel_arm",
+                                         "roll_dumbbell", "pitch_dumbbell","yaw_dumbbell", "total_accel_dumbbell",
+                                         "roll_forearm", "pitch_forearm","yaw_forearm", "total_accel_forearm"))
+summary(trainData)
+featurePlot(x=trainData[,c("roll_belt", "pitch_belt","yaw_belt", "total_accel_belt")],y=trainData$classe, plot="pairs")
+```
+
+## Build a Model
+
+### Partitioning Model
+First, We build a classifiction by tree model:
+```{r, echo=TRUE}
+modFit_rpart <- train(classe~.,method="rpart",data=trainData)
+plot(modFit_rpart$finalModel, uniform=TRUE, main="Classification Tree")
+text(modFit_rpart$finalModel, use.n=TRUE, all=TRUE, cex=.8)
+```
+
+### Bootstrapped Aggregation Model with TreeBag
+We build a model using Boostrapped Aggregation and then compare accuracy.
+```{r, echo=TRUE}
+modFit_bag <- train(classe~.,method="treebag",data=trainData)
+print(modFit_bag)
+```
+
+### Predict Test Set Values Using the Models
+Apply the model to the test data set.
+```{r, echo=TRUE}
+predict_rpart <- predict(modFit_rpart, newdata=testData)
+print(predict_rpart)
+predict_bag <- predict(modFit_bag, newdata=testData)
+print(predict_bag)
+```
+
+## Estimate the Out of Sample Error
+
+### Accuracy based on Cross Validation with the Training Set
+We will estimate the Out of Sample Accuracy by calculating the error rate based on the training data.  First, we create predictions for the training set.  Then plot a confsion matrix.  We see that the bagging model has higher accuracy than the classifaction tree based model.
+
+```{r,echo=TRUE}
+trainPredict_rpart <- predict(modFit_rpart, newdata=trainData)
+confusionMatrix(trainPredict_rpart, trainData$classe)
+
+trainPredict_bag <- predict(modFit_bag, newdata=trainData)
+confusionMatrix(trainPredict_bag, trainData$classe)
+```
+
+## Conclusion
+We conclude that the complex relationship among the variables is best modelled using methods that support non-linear relationships. The more simplistic classification tree approach enables better interpretation of the model, but is unable to repreasent the interplay of the varuables sufficiently.
+
